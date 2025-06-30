@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        #canvas {
+            border: solid 1px black;
+        }
+    </style>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        var setuzoku1 = false;
+        var setuzoku2 = false;
+        var pls_check = false;
+        var sdp2_check = false;
+
+        var sdp1;
+
+        let pc;
+        var dataChannel;
+
+        var dcX, dcY, reset;
+
+        var count = 0;
+
+        var tempsdp;
+
+        const socket = new WebSocket("###");
+
+
+        socket.addEventListener("message", e => {
+
+            if (sdp2_check) {
+                jres = JSON.parse(e.data);
+                if (jres.id == "res2") {
+
+                    console.log(jres.sdp);
+                    let ans = new RTCSessionDescription({
+                        type: 'answer',
+                        sdp: jres.sdp,
+                    });
+                    pc.setRemoteDescription(ans);
+                    console.log("-----------------------------");
+                }
+            }
+        });
+
+
+        function sendMsg() {
+            dataChannel.send("hello");
+        }
+
+        function cli() {
+            console.log("cli");
+            sdp2_check = true;
+            socket.send(sdp1);
+        }
+
+        function cli2() {
+            console.log("cli")
+            pls_check = true;
+            socket.send(JSON.stringify({ id: "pls", sdp: "" }));
+        }
+
+        let ICE = { 'iceServers': [{ "urls": "stun:stun.l.google.com:19302" }] };
+
+
+        window.onload = function () {
+            function createSDP1() {
+                console.log("aaa");
+                pc = new RTCPeerConnection(ICE);
+                console.log(pc);
+
+                dataChannel = pc.createDataChannel("test");
+                rtc_down = pc.createDataChannel("down");
+                rtc_up = pc.createDataChannel("up");
+                rtc_dc = pc.createDataChannel("dc");
+                reset = pc.createDataChannel("reset");
+
+
+                pc.ondatachannel = (event) => {
+                    const dataChannel = event.channel;
+
+                    dataChannel.onmessage = function (event) {
+                        if (dataChannel.label == "down") {
+                            //down();
+
+                            var canvas = document.getElementById("canvas");
+                            c = canvas.getContext("2d");
+                            XYtemp = event.data.split(" ");
+                            c.moveTo(XYtemp[0], XYtemp[1]);
+                            c.beginPath();
+
+                            if (setuzoku2) A_rtc_down.send(event.data);
+                        }
+
+                        if (dataChannel.label == "up") {
+                            //up();
+                        }
+
+                        if (dataChannel.label == "dc") {
+                            var canvas = document.getElementById("canvas");
+                            c = canvas.getContext("2d");
+
+                            XYtemp = event.data.split(" ");
+                            c.lineTo(XYtemp[0], XYtemp[1]);
+
+                            c.stroke();
+
+                            if (setuzoku2) A_rtc_dc.send(event.data);
+                        }
+
+                        if (dataChannel.label == "reset") {
+                            var canvas = document.getElementById("canvas");
+                            c = canvas.getContext("2d");
+                            c.clearRect(0, 0, canvas.width, canvas.height);
+
+                            if (setuzoku2) A_reset.send("r");
+                        }
+
+                        console.log("111Received message:", event.data);
+                    };
+                    dataChannel.onopen = function () {
+                        document.getElementById("setu").textContent = "接続完了1";
+                        setuzoku1 = true;
+                    };
+                };
+
+                var offer = pc.createOffer();
+                pc.setLocalDescription(offer).then(function createSDP2() {
+
+                    sdp1 = JSON.stringify({ id: "sdp1", sdp: pc.localDescription.sdp });
+
+                });
+            }
+            createSDP1();
+
+
+            document.getElementById("canvas").onmousedown = down;
+            document.getElementById("canvas").onmouseup = up;
+            document.getElementById("canvas").onmousemove = move;
+        }
+
+
+        //アンサーSDP関係
+        function createAnsSDP1() {
+            var A_pc = new RTCPeerConnection(ICE);
+
+
+            var A_dataChannel = A_pc.createDataChannel("test");
+            A_rtc_down = A_pc.createDataChannel("down");
+            A_rtc_up = A_pc.createDataChannel("up");
+            A_rtc_dc = A_pc.createDataChannel("dc");
+            A_reset = A_pc.createDataChannel("reset");
+
+
+            A_pc.ondatachannel = (event) => {
+                const dataChannel = event.channel;
+
+                dataChannel.onmessage = function (event) {
+
+                    var canvas = document.getElementById("canvas");
+                    var c = canvas.getContext("2d");
+
+                    if (dataChannel.label == "down") {
+                        //down();
+
+                        var XYtemp = event.data.split(" ");
+                        c.moveTo(XYtemp[0], XYtemp[1]);
+                        c.beginPath();
+
+                        if (setuzoku1) rtc_down.send(event.data);
+                    }
+
+                    if (dataChannel.label == "up") {
+                        //up();
+                    }
+
+                    if (dataChannel.label == "dc") {
+
+                        var XYtemp = event.data.split(" ");
+                        c.lineTo(XYtemp[0], XYtemp[1]);
+
+                        c.stroke();
+
+                        if (setuzoku1) rtc_dc.send(event.data);
+                    }
+
+                    if (dataChannel.label == "reset") {
+                        c.clearRect(0, 0, canvas.width, canvas.height);
+
+                        if (setuzoku1) reset.send("r");
+                    }
+
+                    console.log("222Received message:", dataChannel.label);
+                };
+                dataChannel.onopen = function () {
+                    document.getElementById("setu").textContent = "接続完了2";
+                    setuzoku2 = true;
+                };
+            };
+
+            //res1が返ってきたときの処理
+            socket.addEventListener("message", e => {
+                console.log(e.data);
+                var jres = JSON.parse(e.data);
+                if (pls_check) {
+                    if (jres.id == "res1") {
+                        console.log("--- res1 ---");
+                        console.log(jres.sdp);
+                        let offer = new RTCSessionDescription({
+                            type: 'offer',
+                            sdp: jres.sdp,
+                        });
+
+                        A_pc.setRemoteDescription(offer).then(function () {
+                            var answer = A_pc.createAnswer();
+                            A_pc.setLocalDescription(answer).then(function createSDP2() {
+                                setTimeout(function () {
+                                    sdp2 = JSON.stringify({ id: "sdp2", sdp: A_pc.localDescription.sdp });
+                                    console.log(A_pc);
+                                    console.log(A_pc.localDescription.sdp);
+                                    socket.send(sdp2);
+                                }, 1000);
+                            });;
+                        });
+                    }
+                }
+            });
+
+
+        }
+        createAnsSDP1();
+
+        var c;
+        var dotti = 0;
+        var x1, y1;
+
+        function down(e) {
+            dotti = 1;
+            x1 = e.offsetX;
+            y1 = e.offsetY;
+            var canvas = document.getElementById("canvas");
+            c = canvas.getContext("2d");
+
+
+            c.moveTo(x1, y1);
+            c.beginPath();
+
+            var XYdata = e.offsetX + " " + e.offsetY;
+
+            if (setuzoku1) rtc_down.send(XYdata);
+            if (setuzoku2) A_rtc_down.send(XYdata);
+        }
+
+        function up(e) {
+            var canvas = document.getElementById("canvas");
+            c = canvas.getContext("2d");
+            c.closePath()
+            console.log("up");
+            if (setuzoku1) rtc_up.send("up");
+            if (setuzoku2) A_rtc_up.send("up");
+            dotti = 0;
+        }
+
+        function move(e) {
+            if (dotti == 1) {
+                var canvas = document.getElementById("canvas");
+                c = canvas.getContext("2d");
+
+                c.lineTo(e.offsetX, e.offsetY);
+
+                var XYdata = e.offsetX + " " + e.offsetY;
+                ///dataChannel.send(XYdata);
+                if (setuzoku1) rtc_dc.send(XYdata);
+                if (setuzoku2) A_rtc_dc.send(XYdata);
+
+                c.stroke();
+            }
+
+        }
+
+        function kesu() {
+            var canvas = document.getElementById("canvas");
+            c = canvas.getContext("2d");
+            c.clearRect(0, 0, canvas.width, canvas.height);
+            if (setuzoku1) reset.send("r");
+            if (setuzoku2) A_reset.send("r");
+        }
+
+    </script>
+</head>
+
+<body>
+    <h1>テストページ</h1>
+
+    <div>
+        <p id="setu"></p>
+    </div>
+
+    <button onclick="cli()">websocket test1</button>
+    <button onclick="cli2()">websocket test2</button>
+
+
+    <div>
+        <canvas id="canvas" width="500" height="500"></canvas>
+        <button onclick="kesu()">reset</button>
+    </div>
+
+</body>
+
+</html>

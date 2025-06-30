@@ -1,0 +1,151 @@
+<html>
+
+<head>
+    <title>WebRTC(Peer) Sample</title>
+    <script type="text/javascript" src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        async function startCamera() {
+            const cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: false,
+            }).then(stream => {
+                window.stream = stream;
+                const videoElement = document.getElementById("localVideo")
+                videoElement.autoplay = true;
+                videoElement.srcObject = stream;
+                videoElement.addEventListener("resize", () => {
+                    videoElement.width = videoElement.videoWidth;
+                    videoElement.height = videoElement.videoHeight;
+                });
+
+            });
+        }
+
+
+
+
+
+        const socket = new WebSocket("###");
+        let ICE = { 'iceServers': [{ "urls": "stun:stun.l.google.com:19302" }] };
+
+        var pc;
+        var Aoffer;
+        var dotti_btn = true;
+        var dotti_AB = true;
+
+
+        socket.addEventListener("message", e => {
+
+            dt = JSON.parse(e.data);
+            console.log("aaaa");
+
+            if (dotti_btn) {
+                console.log(dt.sdp)
+                let offer = new RTCSessionDescription({
+                    type: 'offer',
+                    sdp: dt.sdp,
+                });
+
+                pc.setRemoteDescription(offer);
+
+                var answer = pc.createAnswer();
+
+                pc.setLocalDescription(answer).then(function createSDPB() {
+                    setTimeout(function () {
+                        Banswer = JSON.stringify({ id: "zen", sdp: pc.localDescription.sdp, AB: "B" });
+
+                        dotti_btn = false;
+                        dotti_AB = false;
+                        socket.send(Banswer);
+                    }, 1000);
+                })
+            }
+
+            if (dt.AB == "B" && dotti_AB) {
+                let ans = new RTCSessionDescription({
+                    type: 'answer',
+                    sdp: dt.sdp,
+                });
+                pc.setRemoteDescription(ans);
+            }
+        });
+
+        function cli() {
+            dotti_btn = false;
+            socket.send(Aoffer);
+        }
+
+        function test() {
+            dataChan.send("dou");
+        }
+
+        window.onload = function () {
+            pc = new RTCPeerConnection(ICE);
+
+            dataChan = pc.createDataChannel("test");
+
+            startCamera().then(n => {
+
+
+                if (window.stream) {
+                    // Local側のストリームを設定
+                    console.log("kk");
+                    window.stream.getTracks().forEach(track => pc.addTrack(track, window.stream));
+                }
+
+                pc.ondatachannel = (event) => {
+                    const dataChannel = event.channel;
+                    dataChannel.onmessage = function (event) {
+                        if (dataChannel.label == "test") {
+                            console.log("test");
+                        }
+                    }
+                }
+
+                pc.ontrack = function (event) {
+                    // Remote側のストリームを設定
+                    console.log("iii");
+                    if (event.streams && event.streams[0]) {
+                        document.getElementById('remoteVideo').srcObject = event.streams[0];
+                    } else {
+                        document.getElementById('remoteVideo').srcObject = new MediaStream(event.track);
+                    }
+                };
+
+                var offer = pc.createOffer();
+                pc.setLocalDescription(offer).then(function createSDPA() {
+
+                    Aoffer = JSON.stringify({ id: "zen", sdp: pc.localDescription.sdp, AB: "A" });
+
+                });
+
+
+            });
+        }
+    </script>
+    <style type="text/css">
+        video {
+            width: 100%;
+        }
+
+        #localVideo {
+            border: solid 2px black;
+        }
+
+        #remoteVideo {
+            border: solid 2px lime;
+        }
+    </style>
+</head>
+
+<body>
+    <button onclick="cli()">con</button>
+    <button onclick="test()">test</button>
+    Local
+    <video id="localVideo" playsinline autoplay muted></video>
+    Remote
+    <video id="remoteVideo" playsinline autoplay></video>
+</body>
+
+</html>
